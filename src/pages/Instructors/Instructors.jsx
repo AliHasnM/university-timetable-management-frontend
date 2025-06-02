@@ -1,302 +1,435 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import {
+  createInstructor,
+  getAllInstructors,
+  updateInstructor,
+  deleteInstructor,
+} from "../../services/instructorsAPIs";
 
-const initialInstructors = [
-  {
-    id: 1,
-    name: "Dr. Sarah Khan",
-    email: "sarah.khan@university.edu",
-    department: "Computer Science",
-  },
-  {
-    id: 2,
-    name: "Prof. Ali Raza",
-    email: "ali.raza@university.edu",
-    department: "Mathematics",
-  },
-  {
-    id: 3,
-    name: "Dr. Nadia Hussain",
-    email: "nadia.hussain@university.edu",
-    department: "Physics",
-  },
-  {
-    id: 4,
-    name: "Prof. Omar Sheikh",
-    email: "omar.sheikh@university.edu",
-    department: "Chemistry",
-  },
-  {
-    id: 5,
-    name: "Dr. Ayesha Malik",
-    email: "ayesha.malik@university.edu",
-    department: "Biology",
-  },
-  {
-    id: 6,
-    name: "Prof. Kamran Javed",
-    email: "kamran.javed@university.edu",
-    department: "Economics",
-  },
-  {
-    id: 7,
-    name: "Dr. Fahad Iqbal",
-    email: "fahad.iqbal@university.edu",
-    department: "History",
-  },
-  {
-    id: 8,
-    name: "Prof. Sana Mir",
-    email: "sana.mir@university.edu",
-    department: "Political Science",
-  },
-  {
-    id: 9,
-    name: "Dr. Asad Rafiq",
-    email: "asad.rafiq@university.edu",
-    department: "Philosophy",
-  },
-  {
-    id: 10,
-    name: "Prof. Zara Shah",
-    email: "zara.shah@university.edu",
-    department: "Literature",
-  },
-  {
-    id: 11,
-    name: "Dr. Imran Ali",
-    email: "imran.ali@university.edu",
-    department: "Psychology",
-  },
-  // add more if you want
+import { useForm, useFieldArray } from "react-hook-form";
+import Modal from "../../components/Modal/Modal";
+
+import { getAllCourses } from "../../services/coursesAPIs";
+
+import DeleteConfirmModal from "../../components/DeleteConfirmationModal/DeleteConfirmationModal";
+
+// Days of the week options
+const daysOfWeek = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
 ];
 
-const ITEMS_PER_PAGE = 10;
-
-const Instructors = () => {
-  const [instructors, setInstructors] = useState(initialInstructors);
-  const [form, setForm] = useState({ name: "", email: "", department: "" });
+const InstructorPage = () => {
+  const [instructors, setInstructors] = useState([]);
+  const [search, setSearch] = useState("");
   const [editId, setEditId] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [subjects, setSubjects] = useState([]);
+
   const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
-  const handleInputChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const [deleteId, setDeleteId] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
+  const {
+    register,
+    control,
+    handleSubmit,
+    reset,
+    setValue,
+    formState: { errors },
+  } = useForm({
+    defaultValues: {
+      name: "",
+      email: "",
+      subjects: [],
+      availability: [{ day: "", timeSlots: [""] }],
+    },
+  });
+
+  // Manage dynamic availability fields
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "availability",
+  });
+
+  // Fetch instructors
+  const fetchInstructors = async () => {
+    try {
+      setLoading(true);
+      const res = await getAllInstructors();
+      setInstructors(res?.data || []);
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
   };
 
-  const resetForm = () => {
-    setForm({ name: "", email: "", department: "" });
+  // Fetch subjects from API
+  const fetchSubjects = async () => {
+    try {
+      const res = await getAllCourses();
+      setSubjects(res?.data || []);
+    } catch (err) {
+      setError("Failed to fetch subjects", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchInstructors();
+    fetchSubjects();
+  }, []);
+
+  // Prefill form for editing an instructor
+  const handleEdit = (instructor) => {
+    setEditId(instructor._id);
+    setValue("name", instructor.name || "");
+    setValue("email", instructor.email || "");
+    // Map subjects: either strings or objects with _id
+    setValue(
+      "subjects",
+      instructor.subjects?.map((s) => (typeof s === "string" ? s : s._id)) || []
+    );
+    // If availability is empty, initialize with one empty slot
+    setValue(
+      "availability",
+      instructor.availability?.length
+        ? instructor.availability
+        : [{ day: "", timeSlots: [""] }]
+    );
+    setModalOpen(true);
+  };
+
+  // Reset form and open modal for new instructor
+  const handleAddNew = () => {
+    reset({
+      name: "",
+      email: "",
+      subjects: [],
+      availability: [{ day: "", timeSlots: [""] }],
+    });
     setEditId(null);
-    setError("");
+    setModalOpen(true);
   };
 
-  const validateForm = () => {
-    if (!form.name || !form.email || !form.department) {
-      setError("All fields are required.");
-      return false;
-    }
-    const emailRegex = /\S+@\S+\.\S+/;
-    if (!emailRegex.test(form.email)) {
-      setError("Please enter a valid email address.");
-      return false;
-    }
-    return true;
-  };
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
-    if (editId) {
-      setInstructors((prev) =>
-        prev.map((inst) =>
-          inst.id === editId ? { id: editId, ...form } : inst
-        )
-      );
-    } else {
-      const newInstructor = {
-        id: Date.now(),
-        ...form,
+  // Handle form submit for create or update
+  const onSubmit = async (data) => {
+    try {
+      // Clean availability by removing empty time slots
+      const formattedData = {
+        ...data,
+        availability: data.availability.map((slot) => ({
+          day: slot.day,
+          timeSlots: slot.timeSlots.filter(Boolean),
+        })),
       };
-      setInstructors((prev) => [...prev, newInstructor]);
-    }
-    resetForm();
-    setCurrentPage(1); // reset to first page on add/update
-  };
 
-  const handleEdit = (id) => {
-    const instructor = instructors.find((inst) => inst.id === id);
-    if (instructor) {
-      setForm({
-        name: instructor.name,
-        email: instructor.email,
-        department: instructor.department,
-      });
-      setEditId(id);
+      if (editId) {
+        await updateInstructor(editId, formattedData);
+      } else {
+        await createInstructor(formattedData);
+      }
+
+      reset();
+      setEditId(null);
+      setModalOpen(false);
+      fetchInstructors();
       setError("");
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+          err.message ||
+          "Failed to save instructor."
+      );
     }
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this instructor?")) {
-      setInstructors((prev) => prev.filter((inst) => inst.id !== id));
-      if (editId === id) resetForm();
-
-      // Adjust current page if deleting last item on last page
-      const lastPage = Math.ceil((instructors.length - 1) / ITEMS_PER_PAGE);
-      if (currentPage > lastPage) setCurrentPage(lastPage);
+  // Handle delete instructor
+  const handleDelete = async () => {
+    try {
+      await deleteInstructor(deleteId);
+      setShowDeleteModal(false);
+      setDeleteId(null);
+      fetchInstructors();
+    } catch (err) {
+      setError(err.message);
     }
   };
 
-  // Pagination calculations
-  const totalPages = Math.ceil(instructors.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const currentItems = instructors.slice(
-    startIndex,
-    startIndex + ITEMS_PER_PAGE
+  // Pagination and search filter
+  const filteredInstructors = instructors.filter((i) =>
+    i.name.toLowerCase().includes(search.toLowerCase())
   );
+  const paginatedInstructors = filteredInstructors.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+  const totalPages = Math.ceil(filteredInstructors.length / itemsPerPage);
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-3xl font-bold pt-10 mb-8 text-blue-800">
-        Manage Instructors
-      </h1>
+    <div className="p-6 max-w-4xl mx-auto">
+      <h1 className="text-2xl font-bold mt-8 mb-4">Instructor Management</h1>
 
-      {/* Instructor Form */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-6 rounded shadow-md mb-10"
-      >
-        <h2 className="text-xl font-semibold mb-4">
-          {editId ? "Edit Instructor" : "Add New Instructor"}
-        </h2>
+      <div className="flex justify-between mb-4">
+        <input
+          type="text"
+          placeholder="Search by name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="border-2 border-blue-500 p-2 rounded-md w-full max-w-sm"
+        />
+        <button
+          onClick={handleAddNew}
+          className="ml-4 bg-blue-600 font-semibold text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Add Instructor
+        </button>
+      </div>
 
-        {error && <p className="text-red-600 mb-4 font-medium">{error}</p>}
+      {loading && <p>Loading instructors...</p>}
+      {error && <p className="text-red-600">{error}</p>}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <input
-            type="text"
-            name="name"
-            placeholder="Full Name"
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={form.name}
-            onChange={handleInputChange}
-          />
-          <input
-            type="email"
-            name="email"
-            placeholder="Email Address"
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={form.email}
-            onChange={handleInputChange}
-          />
-          <input
-            type="text"
-            name="department"
-            placeholder="Department"
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={form.department}
-            onChange={handleInputChange}
-          />
-        </div>
-
-        <div className="flex space-x-4">
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold transition"
+      <div className="space-y-4">
+        {paginatedInstructors.map((instructor) => (
+          <div
+            key={instructor._id}
+            className="flex justify-between items-center bg-gray-100 p-4 rounded shadow"
           >
-            {editId ? "Update" : "Add"}
+            <div>
+              <p className="font-semibold">{instructor.name}</p>
+              <p className="text-gray-600">{instructor.email}</p>
+              <p className="text-sm mt-1">
+                Subjects:{" "}
+                {instructor.subjects
+                  ?.map((s) => (typeof s === "string" ? s : s.name || s._id))
+                  .join(", ")}
+              </p>
+            </div>
+            <div className="space-x-2">
+              <button
+                onClick={() => handleEdit(instructor)}
+                className="bg-yellow-400 text-white px-3 py-1 rounded hover:bg-yellow-500"
+              >
+                Edit
+              </button>
+              <button
+                onClick={() => {
+                  setDeleteId(instructor._id);
+                  setShowDeleteModal(true);
+                }}
+                className="bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+      />
+      <div className="mt-6 flex justify-center gap-2">
+        {Array.from({ length: totalPages }, (_, i) => (
+          <button
+            key={i}
+            onClick={() => setCurrentPage(i + 1)}
+            className={`px-3 py-1 border rounded ${
+              currentPage === i + 1 ? "bg-blue-600 text-white" : "bg-white"
+            }`}
+          >
+            {i + 1}
           </button>
-          {editId && (
+        ))}
+      </div>
+
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)}>
+        <h2 className="text-xl font-semibold mb-4">
+          {editId ? "Update Instructor" : "Add Instructor"}
+        </h2>
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-4 max-h-[70vh] overflow-auto"
+        >
+          {/* Name */}
+          <div>
+            <label className="block mb-1 font-medium">Name</label>
+            <input
+              {...register("name", { required: "Name is required" })}
+              className="w-full p-2 border rounded"
+            />
+            {errors.name && (
+              <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
+            )}
+          </div>
+
+          {/* Email */}
+          <div>
+            <label className="block mb-1 font-medium">Email</label>
+            <input
+              type="email"
+              {...register("email", {
+                required: "Email is required",
+                pattern: {
+                  value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                  message: "Invalid email format",
+                },
+              })}
+              className="w-full p-2 border rounded"
+            />
+            {errors.email && (
+              <p className="text-red-500 text-sm mt-1">
+                {errors.email.message}
+              </p>
+            )}
+          </div>
+
+          {/* Subjects (multi-select) */}
+          <div>
+            <label className="block mb-1 font-medium">Subjects</label>
+            <select
+              multiple
+              {...register("subjects", {
+                required: "Select at least one subject",
+              })}
+              className="w-full p-2 border rounded"
+              size={subjects.length > 5 ? 5 : subjects.length}
+              style={{ height: "auto" }}
+            >
+              {subjects.map((subject) => (
+                <option key={subject._id} value={subject._id}>
+                  {subject.courseName || subject.name || subject._id}
+                </option>
+              ))}
+            </select>
+            {errors.subjects && (
+              <p className="text-red-500 text-sm mt-1">
+                {errors.subjects.message}
+              </p>
+            )}
+          </div>
+
+          {/* Availability (dynamic) */}
+          <div>
+            <label className="block mb-1 font-medium">Availability</label>
+            {fields.map((field, index) => (
+              <div
+                key={field.id}
+                className="mb-4 p-2 border rounded bg-gray-50"
+              >
+                <div className="flex items-center gap-2 mb-2">
+                  <select
+                    {...register(`availability.${index}.day`, {
+                      required: "Day is required",
+                    })}
+                    className="p-2 border rounded flex-grow"
+                  >
+                    <option value="">Select Day</option>
+                    {daysOfWeek.map((day) => (
+                      <option key={day} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => remove(index)}
+                    className="text-red-600 font-bold px-2 py-1 rounded hover:bg-red-100"
+                  >
+                    Remove Day
+                  </button>
+                </div>
+
+                <TimeSlotsControl
+                  control={control}
+                  index={index}
+                  register={register}
+                  errors={errors}
+                />
+              </div>
+            ))}
+
             <button
               type="button"
-              onClick={resetForm}
-              className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-2 rounded font-semibold transition"
+              onClick={() => append({ day: "", timeSlots: [""] })}
+              className="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+            >
+              Add Availability Day
+            </button>
+          </div>
+
+          <div className="flex justify-end space-x-2 mt-4">
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                setModalOpen(false);
+                setEditId(null);
+              }}
+              className="px-4 py-2 border rounded hover:bg-gray-100"
             >
               Cancel
             </button>
-          )}
-        </div>
-      </form>
-
-      {/* Instructors Table */}
-      <div className="overflow-x-auto">
-        <table className="min-w-full bg-white shadow-md rounded overflow-hidden">
-          <thead className="bg-blue-600 text-white">
-            <tr>
-              <th className="py-3 px-6 text-left">Name</th>
-              <th className="py-3 px-6 text-left">Email</th>
-              <th className="py-3 px-6 text-left">Department</th>
-              <th className="py-3 px-6 text-center">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {currentItems.length === 0 ? (
-              <tr>
-                <td colSpan="4" className="text-center py-6 text-gray-500">
-                  No instructors found. Please add some.
-                </td>
-              </tr>
-            ) : (
-              currentItems.map(({ id, name, email, department }) => (
-                <tr key={id} className="border-b hover:bg-gray-50 transition">
-                  <td className="py-3 px-6">{name}</td>
-                  <td className="py-3 px-6">{email}</td>
-                  <td className="py-3 px-6">{department}</td>
-                  <td className="py-3 px-6 text-center space-x-2">
-                    <button
-                      onClick={() => handleEdit(id)}
-                      className="bg-yellow-400 hover:bg-yellow-300 text-blue-900 font-semibold px-3 py-1 rounded transition"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(id)}
-                      className="bg-red-500 hover:bg-red-600 text-white font-semibold px-3 py-1 rounded transition"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="flex justify-center space-x-4 mt-6">
-          <button
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-            className={`px-4 py-2 rounded ${
-              currentPage === 1
-                ? "bg-gray-300 cursor-not-allowed"
-                : "bg-blue-600 text-white hover:bg-blue-700"
-            }`}
-          >
-            Previous
-          </button>
-          <span className="px-4 py-2 font-semibold text-gray-700">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            disabled={currentPage === totalPages}
-            onClick={() =>
-              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-            }
-            className={`px-4 py-2 rounded ${
-              currentPage === totalPages
-                ? "bg-gray-300 cursor-not-allowed"
-                : "bg-blue-600 text-white hover:bg-blue-700"
-            }`}
-          >
-            Next
-          </button>
-        </div>
-      )}
+            <button
+              type="submit"
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+            >
+              {editId ? "Update" : "Add"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
 
-export default Instructors;
+// Component to manage multiple time slots for a day
+const TimeSlotsControl = ({ control, index, register }) => {
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: `availability.${index}.timeSlots`,
+  });
+
+  return (
+    <div>
+      {fields.map((field, idx) => (
+        <div key={field.id} className="flex items-center gap-2 mb-2">
+          <input
+            type="time"
+            {...register(`availability.${index}.timeSlots.${idx}`, {
+              required: "Time slot is required",
+            })}
+            className="p-2 border rounded flex-grow"
+          />
+          <button
+            type="button"
+            onClick={() => remove(idx)}
+            className="text-red-600 font-bold px-2 py-1 rounded hover:bg-red-100"
+          >
+            Remove
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={() => append("")}
+        className="text-green-700 font-semibold text-sm hover:underline"
+      >
+        + Add Time Slot
+      </button>
+      {/* Errors for timeSlots can be shown here */}
+    </div>
+  );
+};
+
+export default InstructorPage;

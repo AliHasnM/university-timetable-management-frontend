@@ -1,243 +1,205 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
+import {
+  createCourse,
+  getAllCourses,
+  updateCourse,
+  deleteCourse,
+} from "../../services/coursesAPIs";
+import { useForm } from "react-hook-form";
+import Modal from "../../components/Modal/Modal";
+import DeleteConfirmModal from "../../components/DeleteConfirmationModal/DeleteConfirmationModal";
 
-const initialCourses = [
-  {
-    id: 1,
-    title: "Introduction to Computer Science",
-    code: "CS101",
-    instructor: "Dr. Sarah Khan",
-  },
-  { id: 2, title: "Calculus I", code: "MATH101", instructor: "Prof. Ali Raza" },
-  {
-    id: 3,
-    title: "Physics I",
-    code: "PHY101",
-    instructor: "Dr. Nadia Hussain",
-  },
-  {
-    id: 4,
-    title: "Organic Chemistry",
-    code: "CHEM201",
-    instructor: "Prof. Omar Sheikh",
-  },
-  {
-    id: 5,
-    title: "Biology Basics",
-    code: "BIO101",
-    instructor: "Dr. Ayesha Malik",
-  },
-  {
-    id: 6,
-    title: "Microeconomics",
-    code: "ECO101",
-    instructor: "Prof. Kamran Javed",
-  },
-  {
-    id: 7,
-    title: "World History",
-    code: "HIST101",
-    instructor: "Dr. Fahad Iqbal",
-  },
-  {
-    id: 8,
-    title: "Political Science",
-    code: "POL101",
-    instructor: "Prof. Sana Mir",
-  },
-  {
-    id: 9,
-    title: "Philosophy 101",
-    code: "PHIL101",
-    instructor: "Dr. Asad Rafiq",
-  },
-  {
-    id: 10,
-    title: "English Literature",
-    code: "LIT101",
-    instructor: "Prof. Zara Shah",
-  },
-  {
-    id: 11,
-    title: "Psychology Basics",
-    code: "PSY101",
-    instructor: "Dr. Imran Ali",
-  },
-  // add more if you want
-];
-
-const ITEMS_PER_PAGE = 10;
-
-const Courses = () => {
-  const [courses, setCourses] = useState(initialCourses);
-  const [form, setForm] = useState({ title: "", code: "", instructor: "" });
+const CoursesPage = () => {
+  const [courses, setCourses] = useState([]);
+  const [search, setSearch] = useState("");
   const [editId, setEditId] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [deleteId, setDeleteId] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
-  const handleInputChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+  const { handleSubmit, reset, setValue, register } = useForm({
+    defaultValues: {
+      courseName: "",
+      courseCode: "",
+      creditHours: "",
+      classType: "Lecture",
+      semester: "",
+      department: "",
+      status: "Active",
+    },
+  });
+
+  const fetchCourses = async () => {
+    try {
+      setLoading(true);
+      const res = await getAllCourses();
+      setCourses(res?.data || []);
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
   };
 
-  const resetForm = () => {
-    setForm({ title: "", code: "", instructor: "" });
+  useEffect(() => {
+    fetchCourses();
+  }, []);
+
+  const handleAddNew = () => {
+    reset({
+      courseName: "",
+      courseCode: "",
+      creditHours: "",
+      classType: "Lecture",
+      semester: "",
+      department: "",
+      status: "Active",
+    });
     setEditId(null);
-    setError("");
+    setModalOpen(true);
   };
 
-  const validateForm = () => {
-    if (!form.title || !form.code || !form.instructor) {
-      setError("All fields are required.");
-      return false;
+  const handleEdit = (course) => {
+    setEditId(course._id);
+    setValue("courseName", course.courseName || "");
+    setValue("courseCode", course.courseCode || "");
+    setValue("creditHours", course.creditHours || "");
+    setValue("classType", course.classType || "Lecture");
+    setValue("semester", course.semester || "");
+    setValue("department", course.department || "");
+    setValue("status", course.status || "Active");
+    setModalOpen(true);
+  };
+
+  const handleDelete = async () => {
+    try {
+      await deleteCourse(deleteId);
+      setShowDeleteModal(false);
+      setDeleteId(null);
+      fetchCourses();
+    } catch (err) {
+      setError(err.message);
     }
-    return true;
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
-    if (editId) {
-      setCourses((prev) =>
-        prev.map((course) =>
-          course.id === editId ? { id: editId, ...form } : course
-        )
-      );
-    } else {
-      const newCourse = {
-        id: Date.now(),
-        ...form,
-      };
-      setCourses((prev) => [...prev, newCourse]);
-    }
-    resetForm();
-    setCurrentPage(1);
-  };
-
-  const handleEdit = (id) => {
-    const course = courses.find((c) => c.id === id);
-    if (course) {
-      setForm({
-        title: course.title,
-        code: course.code,
-        instructor: course.instructor,
-      });
-      setEditId(id);
+  const onSubmit = async (data) => {
+    try {
+      if (editId) {
+        await updateCourse(editId, data);
+      } else {
+        await createCourse(data);
+      }
+      reset();
+      setEditId(null);
+      setModalOpen(false);
+      fetchCourses();
       setError("");
+    } catch (err) {
+      setError(
+        err.response?.data?.message || err.message || "Failed to save course."
+      );
     }
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this course?")) {
-      setCourses((prev) => prev.filter((c) => c.id !== id));
-      if (editId === id) resetForm();
+  const filteredCourses = courses.filter((course) =>
+    course.courseName.toLowerCase().includes(search.toLowerCase())
+  );
 
-      const lastPage = Math.ceil((courses.length - 1) / ITEMS_PER_PAGE);
-      if (currentPage > lastPage) setCurrentPage(lastPage);
-    }
-  };
+  const paginatedCourses = filteredCourses.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
-  // Pagination
-  const totalPages = Math.ceil(courses.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const currentItems = courses.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredCourses.length / itemsPerPage);
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-3xl font-bold pt-10 mb-8 text-green-800">
-        Manage Courses
-      </h1>
+    <div className="p-6 max-w-6xl mx-auto">
+      <h1 className="text-2xl font-bold mt-8 mb-4">Course Management</h1>
 
-      {/* Course Form */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-6 rounded shadow-md mb-10"
-      >
-        <h2 className="text-xl font-semibold mb-4">
-          {editId ? "Edit Course" : "Add New Course"}
-        </h2>
+      <div className="flex justify-between mb-4">
+        <input
+          type="text"
+          placeholder="Search by course name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="border-2 border-blue-500 p-2 rounded-md w-full max-w-sm"
+        />
+        <button
+          onClick={handleAddNew}
+          className="ml-4 bg-blue-600 font-semibold text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Add Course
+        </button>
+      </div>
 
-        {error && <p className="text-red-600 mb-4 font-medium">{error}</p>}
+      {loading && <p>Loading courses...</p>}
+      {error && <p className="text-red-600">{error}</p>}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <input
-            type="text"
-            name="title"
-            placeholder="Course Title"
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            value={form.title}
-            onChange={handleInputChange}
-          />
-          <input
-            type="text"
-            name="code"
-            placeholder="Course Code"
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            value={form.code}
-            onChange={handleInputChange}
-          />
-          <input
-            type="text"
-            name="instructor"
-            placeholder="Instructor"
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-green-500"
-            value={form.instructor}
-            onChange={handleInputChange}
-          />
-        </div>
-
-        <div className="flex space-x-4">
-          <button
-            type="submit"
-            className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded font-semibold transition"
-          >
-            {editId ? "Update" : "Add"}
-          </button>
-          {editId && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-2 rounded font-semibold transition"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
-      </form>
-
-      {/* Courses Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full bg-white shadow-md rounded overflow-hidden">
-          <thead className="bg-green-600 text-white">
+        <table className="min-w-full bg-white border border-gray-300 rounded shadow">
+          <thead className="bg-blue-600 text-white">
             <tr>
-              <th className="py-3 px-6 text-left">Course Title</th>
-              <th className="py-3 px-6 text-left">Course Code</th>
-              <th className="py-3 px-6 text-left">Instructor</th>
-              <th className="py-3 px-6 text-center">Actions</th>
+              <th className="py-2 px-4 border-r text-sm font-semibold uppercase ">
+                Course Name
+              </th>
+              <th className="py-2 px-4 border-r text-sm font-semibold uppercase">
+                Course Code
+              </th>
+              <th className="py-2 px-4 border-r text-sm font-semibold uppercase">
+                Credit Hours
+              </th>
+              <th className="py-2 px-4 border-r text-sm font-semibold uppercase">
+                Semester
+              </th>
+              <th className="py-2 px-4 border-r text-sm font-semibold uppercase">
+                Department
+              </th>
+              <th className="py-2 px-4 border-r text-sm font-semibold uppercase">
+                Class Type
+              </th>
+              <th className="py-2 px-4 border-r text-sm font-semibold uppercase">
+                Status
+              </th>
+              <th className="py-2 px-4 text-sm font-semibold uppercase">
+                Actions
+              </th>
             </tr>
           </thead>
           <tbody>
-            {currentItems.length === 0 ? (
+            {paginatedCourses.length === 0 ? (
               <tr>
-                <td colSpan="4" className="text-center py-6 text-gray-500">
-                  No courses found. Please add some.
+                <td colSpan="8" className="text-center py-4">
+                  No courses found.
                 </td>
               </tr>
             ) : (
-              currentItems.map(({ id, title, code, instructor }) => (
-                <tr key={id} className="border-b hover:bg-gray-50 transition">
-                  <td className="py-3 px-6">{title}</td>
-                  <td className="py-3 px-6">{code}</td>
-                  <td className="py-3 px-6">{instructor}</td>
-                  <td className="py-3 px-6 text-center space-x-2">
+              paginatedCourses.map((course) => (
+                <tr key={course._id} className="hover:bg-gray-100">
+                  <td className="border px-4 py-2">{course.courseName}</td>
+                  <td className="border px-4 py-2">{course.courseCode}</td>
+                  <td className="border px-4 py-2">{course.creditHours}</td>
+                  <td className="border px-4 py-2">{course.semester}</td>
+                  <td className="border px-4 py-2">{course.department}</td>
+                  <td className="border px-4 py-2">{course.classType}</td>
+                  <td className="border px-4 py-2">{course.status}</td>
+                  <td className="border px-4 py-2 space-x-2 text-center">
                     <button
-                      onClick={() => handleEdit(id)}
-                      className="bg-yellow-400 hover:bg-yellow-300 text-green-900 font-semibold px-3 py-1 rounded transition"
+                      onClick={() => handleEdit(course)}
+                      className="bg-yellow-400 text-white px-3 py-1 rounded hover:bg-yellow-500"
                     >
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(id)}
-                      className="bg-red-500 hover:bg-red-600 text-white font-semibold px-3 py-1 rounded transition"
+                      onClick={() => {
+                        setDeleteId(course._id);
+                        setShowDeleteModal(true);
+                      }}
+                      className="bg-red-500 m-2 text-white px-3 py-1 rounded hover:bg-red-600"
                     >
                       Delete
                     </button>
@@ -249,40 +211,128 @@ const Courses = () => {
         </table>
       </div>
 
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-center space-x-4 mt-6">
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+      />
+
+      <div className="mt-6 flex justify-center gap-2">
+        {Array.from({ length: totalPages }, (_, i) => (
           <button
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-            className={`px-4 py-2 rounded ${
-              currentPage === 1
-                ? "bg-gray-300 cursor-not-allowed"
-                : "bg-green-600 text-white hover:bg-green-700"
+            key={i}
+            onClick={() => setCurrentPage(i + 1)}
+            className={`px-3 py-1 border rounded ${
+              currentPage === i + 1 ? "bg-blue-600 text-white" : "bg-white"
             }`}
           >
-            Previous
+            {i + 1}
           </button>
-          <span className="px-4 py-2 font-semibold text-gray-700">
-            Page {currentPage} of {totalPages}
-          </span>
-          <button
-            disabled={currentPage === totalPages}
-            onClick={() =>
-              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-            }
-            className={`px-4 py-2 rounded ${
-              currentPage === totalPages
-                ? "bg-gray-300 cursor-not-allowed"
-                : "bg-green-600 text-white hover:bg-green-700"
-            }`}
-          >
-            Next
-          </button>
+        ))}
+      </div>
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)}>
+        <h2 className="text-xl font-semibold mb-4">
+          {editId ? "Update Course" : "Add Course"}
+        </h2>
+
+        <div style={{ maxHeight: "400px", overflowY: "auto" }}>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div>
+              <label className="block mb-1 font-medium">Course Name</label>
+              <input
+                {...register("courseName", { required: true })}
+                className="w-full border p-2 rounded"
+                type="text"
+                placeholder="Course Name"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-1 font-medium">Course Code</label>
+              <input
+                {...register("courseCode", { required: true })}
+                className="w-full border p-2 rounded"
+                type="text"
+                placeholder="Course Code"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-1 font-medium">Credit Hours</label>
+              <input
+                {...register("creditHours", { required: true })}
+                className="w-full border p-2 rounded"
+                type="number"
+                placeholder="Credit Hours"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-1 font-medium">Class Type</label>
+              <select
+                {...register("classType")}
+                className="w-full border p-2 rounded"
+              >
+                <option value="Lecture">Lecture</option>
+                <option value="Lab">Lab</option>
+                <option value="Tutorial">Tutorial</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block mb-1 font-medium">Semester</label>
+              <input
+                {...register("semester", { required: true })}
+                className="w-full border p-2 rounded"
+                type="text"
+                placeholder="Semester"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-1 font-medium">Department</label>
+              <input
+                {...register("department", { required: true })}
+                className="w-full border p-2 rounded"
+                type="text"
+                placeholder="Department"
+              />
+            </div>
+
+            <div>
+              <label className="block mb-1 font-medium">Status</label>
+              <select
+                {...register("status")}
+                className="w-full border p-2 rounded"
+              >
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end space-x-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setModalOpen(false);
+                  reset();
+                }}
+                className="px-4 py-2 bg-gray-300 rounded"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-blue-600 text-white rounded"
+              >
+                {editId ? "Update" : "Add"}
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };
 
-export default Courses;
+export default CoursesPage;

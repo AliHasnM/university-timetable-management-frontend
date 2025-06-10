@@ -1,212 +1,233 @@
-import React, { useState } from "react";
+// Import at top
+import React, { useEffect, useState } from "react";
+import {
+  createRoom,
+  getAllRooms,
+  updateRoom,
+  deleteRoom,
+} from "../../services/roomsAPIs";
+import { useForm, useFieldArray } from "react-hook-form";
+import Modal from "../../components/Modal/Modal";
+import DeleteConfirmModal from "../../components/DeleteConfirmationModal/DeleteConfirmationModal";
 
-const initialRooms = [
-  { id: 1, name: "Room A101", capacity: 30, location: "Building A, 1st Floor" },
-  { id: 2, name: "Room B202", capacity: 50, location: "Building B, 2nd Floor" },
-  { id: 3, name: "Room C303", capacity: 20, location: "Building C, 3rd Floor" },
-  { id: 4, name: "Room D404", capacity: 40, location: "Building D, 4th Floor" },
-  { id: 5, name: "Room E505", capacity: 25, location: "Building E, 5th Floor" },
-  { id: 6, name: "Room F606", capacity: 35, location: "Building F, 6th Floor" },
-  { id: 7, name: "Room G707", capacity: 45, location: "Building G, 7th Floor" },
-  { id: 8, name: "Room H808", capacity: 60, location: "Building H, 8th Floor" },
-  { id: 9, name: "Room I909", capacity: 15, location: "Building I, 9th Floor" },
-  {
-    id: 10,
-    name: "Room J010",
-    capacity: 55,
-    location: "Building J, Ground Floor",
-  },
-  {
-    id: 11,
-    name: "Room K111",
-    capacity: 30,
-    location: "Building K, 1st Floor",
-  },
+// Days of the week options
+const daysOfWeek = [
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+  "Sunday",
 ];
 
-const ITEMS_PER_PAGE = 10;
-
-const Rooms = () => {
-  const [rooms, setRooms] = useState(initialRooms);
-  const [form, setForm] = useState({ name: "", capacity: "", location: "" });
+const RoomsPage = () => {
+  const [rooms, setRooms] = useState([]);
+  const [search, setSearch] = useState("");
   const [editId, setEditId] = useState(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [deleteId, setDeleteId] = useState(null);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 5;
 
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
-    setForm({ ...form, [name]: value });
+  const { handleSubmit, reset, register, control } = useForm({
+    defaultValues: {
+      roomNumber: "",
+      roomType: "Room",
+      capacity: "",
+      location: "Main Campus",
+      equipment: "Lecture",
+      isActive: true,
+      availability: [{ day: "", timeSlots: [""] }],
+    },
+  });
+
+  const {
+    fields: availabilityFields,
+    append,
+    remove,
+  } = useFieldArray({
+    control,
+    name: "availability",
+  });
+
+  const fetchRooms = async () => {
+    try {
+      setLoading(true);
+      const res = await getAllRooms();
+      setRooms(res?.data || []);
+      setLoading(false);
+    } catch (err) {
+      setError(err.message);
+      setLoading(false);
+    }
   };
 
-  const resetForm = () => {
-    setForm({ name: "", capacity: "", location: "" });
+  useEffect(() => {
+    fetchRooms();
+  }, []);
+
+  const handleAddNew = () => {
+    reset();
     setEditId(null);
-    setError("");
+    setModalOpen(true);
   };
 
-  const validateForm = () => {
-    if (!form.name || !form.capacity || !form.location) {
-      setError("All fields are required.");
-      return false;
-    }
-    if (isNaN(form.capacity) || parseInt(form.capacity) <= 0) {
-      setError("Capacity must be a positive number.");
-      return false;
-    }
-    return true;
+  const handleEdit = (room) => {
+    setEditId(room._id);
+    reset({
+      ...room,
+      availability: room.availability.length
+        ? room.availability
+        : [{ day: "", timeSlots: [""] }],
+    });
+    setModalOpen(true);
   };
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
-
-    if (editId) {
-      setRooms((prev) =>
-        prev.map((room) =>
-          room.id === editId
-            ? { id: editId, ...form, capacity: parseInt(form.capacity) }
-            : room
-        )
-      );
-    } else {
-      const newRoom = {
-        id: Date.now(),
-        name: form.name,
-        capacity: parseInt(form.capacity),
-        location: form.location,
-      };
-      setRooms((prev) => [...prev, newRoom]);
+  const handleDelete = async () => {
+    try {
+      await deleteRoom(deleteId);
+      setShowDeleteModal(false);
+      setDeleteId(null);
+      fetchRooms();
+    } catch (err) {
+      setError(err.message);
     }
-    resetForm();
-    setCurrentPage(1);
   };
 
-  const handleEdit = (id) => {
-    const room = rooms.find((r) => r.id === id);
-    if (room) {
-      setForm({
-        name: room.name,
-        capacity: room.capacity.toString(),
-        location: room.location,
-      });
-      setEditId(id);
+  const onSubmit = async (data) => {
+    try {
+      if (editId) {
+        await updateRoom(editId, data);
+      } else {
+        await createRoom(data);
+      }
+      reset();
+      setEditId(null);
+      setModalOpen(false);
+      fetchRooms();
       setError("");
+    } catch (err) {
+      setError(
+        err.response?.data?.message || err.message || "Failed to save room."
+      );
     }
   };
 
-  const handleDelete = (id) => {
-    if (window.confirm("Are you sure you want to delete this room?")) {
-      setRooms((prev) => prev.filter((r) => r.id !== id));
-      if (editId === id) resetForm();
+  const filteredRooms = rooms.filter((room) =>
+    room.roomNumber.toLowerCase().includes(search.toLowerCase())
+  );
 
-      const lastPage = Math.ceil((rooms.length - 1) / ITEMS_PER_PAGE);
-      if (currentPage > lastPage) setCurrentPage(lastPage);
-    }
-  };
+  const paginatedRooms = filteredRooms.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
-  // Pagination
-  const totalPages = Math.ceil(rooms.length / ITEMS_PER_PAGE);
-  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-  const currentItems = rooms.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredRooms.length / itemsPerPage);
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-3xl font-bold pt-10 mb-8 text-blue-800">
-        Manage Rooms
-      </h1>
+    <div className="p-6 max-w-6xl mx-auto">
+      <h1 className="text-2xl font-bold mt-8 mb-4">Room Management</h1>
 
-      {/* Room Form */}
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-6 rounded shadow-md mb-10"
-      >
-        <h2 className="text-xl font-semibold mb-4">
-          {editId ? "Edit Room" : "Add New Room"}
-        </h2>
+      <div className="flex justify-between mb-4">
+        <input
+          type="text"
+          placeholder="Search by room number..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="border-2 border-blue-500 p-2 rounded-md w-full max-w-sm"
+        />
+        <button
+          onClick={handleAddNew}
+          className="ml-4 bg-blue-600 font-semibold text-white px-4 py-2 rounded hover:bg-blue-700"
+        >
+          Add Room
+        </button>
+      </div>
 
-        {error && <p className="text-red-600 mb-4 font-medium">{error}</p>}
+      {loading && <p>Loading rooms...</p>}
+      {error && <p className="text-red-600">{error}</p>}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <input
-            type="text"
-            name="name"
-            placeholder="Room Name (e.g. Room A101)"
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={form.name}
-            onChange={handleInputChange}
-          />
-          <input
-            type="number"
-            name="capacity"
-            placeholder="Capacity"
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={form.capacity}
-            onChange={handleInputChange}
-            min="1"
-          />
-          <input
-            type="text"
-            name="location"
-            placeholder="Location (e.g. Building A, 1st Floor)"
-            className="border rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            value={form.location}
-            onChange={handleInputChange}
-          />
-        </div>
-
-        <div className="flex space-x-4">
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded font-semibold transition"
-          >
-            {editId ? "Update" : "Add"}
-          </button>
-          {editId && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="bg-gray-300 hover:bg-gray-400 text-gray-800 px-6 py-2 rounded font-semibold transition"
-            >
-              Cancel
-            </button>
-          )}
-        </div>
-      </form>
-
-      {/* Rooms Table */}
       <div className="overflow-x-auto">
-        <table className="min-w-full bg-white shadow-md rounded overflow-hidden">
+        <table className="min-w-full bg-white border border-gray-300 rounded shadow">
           <thead className="bg-blue-600 text-white">
             <tr>
-              <th className="py-3 px-6 text-left">Room Name</th>
-              <th className="py-3 px-6 text-left">Capacity</th>
-              <th className="py-3 px-6 text-left">Location</th>
-              <th className="py-3 px-6 text-center">Actions</th>
+              <th className="px-6 py-3 text-left text-sm font-semibold uppercase">
+                Room Number
+              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold uppercase">
+                Type
+              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold uppercase">
+                Capacity
+              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold uppercase">
+                Location
+              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold uppercase">
+                Equipment
+              </th>{" "}
+              {/* NEW */}
+              <th className="px-6 py-3 text-left text-sm font-semibold uppercase">
+                Active
+              </th>
+              <th className="px-6 py-3 text-left text-sm font-semibold uppercase">
+                Availability
+              </th>{" "}
+              {/* NEW */}
+              <th className="px-6 py-3 text-left text-sm font-semibold uppercase">
+                Actions
+              </th>
             </tr>
           </thead>
+
           <tbody>
-            {currentItems.length === 0 ? (
+            {paginatedRooms.length === 0 ? (
               <tr>
-                <td colSpan="4" className="text-center py-6 text-gray-500">
-                  No rooms found. Please add some.
+                <td colSpan="8" className="text-center py-4">
+                  No rooms found.
                 </td>
               </tr>
             ) : (
-              currentItems.map(({ id, name, capacity, location }) => (
-                <tr key={id} className="border-b hover:bg-gray-50 transition">
-                  <td className="py-3 px-6">{name}</td>
-                  <td className="py-3 px-6">{capacity}</td>
-                  <td className="py-3 px-6">{location}</td>
-                  <td className="py-3 px-6 text-center space-x-2">
+              paginatedRooms.map((room) => (
+                <tr key={room._id} className="hover:bg-gray-100">
+                  <td className="border px-4 py-2">{room.roomNumber}</td>
+                  <td className="border px-4 py-2">{room.roomType}</td>
+                  <td className="border px-4 py-2">{room.capacity}</td>
+                  <td className="border px-4 py-2">{room.location}</td>
+                  <td className="border px-4 py-2">{room.equipment}</td>{" "}
+                  {/* NEW */}
+                  <td className="border px-4 py-2">
+                    {room.isActive ? "Yes" : "No"}
+                  </td>
+                  <td className="border px-4 py-2 text-sm whitespace-pre-line">
+                    {room.availability && room.availability.length > 0
+                      ? room.availability
+                          .map(
+                            (slot) =>
+                              `${slot.day}: ${slot.timeSlots
+                                .filter(Boolean)
+                                .join(", ")}`
+                          )
+                          .join("\n")
+                      : "N/A"}
+                  </td>
+                  <td className="border px-4 py-2 space-x-2 text-center">
                     <button
-                      onClick={() => handleEdit(id)}
-                      className="bg-yellow-400 hover:bg-yellow-300 text-blue-900 font-semibold px-3 py-1 rounded transition"
+                      onClick={() => handleEdit(room)}
+                      className="bg-yellow-400 text-white px-3 py-1 rounded hover:bg-yellow-500"
                     >
                       Edit
                     </button>
                     <button
-                      onClick={() => handleDelete(id)}
-                      className="bg-red-500 hover:bg-red-600 text-white font-semibold px-3 py-1 rounded transition"
+                      onClick={() => {
+                        setDeleteId(room._id);
+                        setShowDeleteModal(true);
+                      }}
+                      className="bg-red-500 m-2 text-white px-3 py-1 rounded hover:bg-red-600"
                     >
                       Delete
                     </button>
@@ -218,50 +239,212 @@ const Rooms = () => {
         </table>
       </div>
 
+      <DeleteConfirmModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={handleDelete}
+      />
+
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex justify-center space-x-4 mt-6">
+      <div className="mt-6 flex justify-center gap-2">
+        {Array.from({ length: totalPages }, (_, i) => (
           <button
-            disabled={currentPage === 1}
-            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
-            className={`px-4 py-2 rounded ${
-              currentPage === 1
-                ? "bg-gray-300 cursor-not-allowed"
-                : "bg-blue-600 text-white hover:bg-blue-700"
+            key={i}
+            onClick={() => setCurrentPage(i + 1)}
+            className={`px-3 py-1 border rounded ${
+              currentPage === i + 1 ? "bg-blue-600 text-white" : "bg-white"
             }`}
           >
-            Previous
+            {i + 1}
           </button>
-          {[...Array(totalPages)].map((_, idx) => (
-            <button
-              key={idx + 1}
-              onClick={() => setCurrentPage(idx + 1)}
-              className={`px-4 py-2 rounded ${
-                currentPage === idx + 1
-                  ? "bg-blue-800 text-white"
-                  : "bg-blue-200 hover:bg-blue-300"
-              }`}
+        ))}
+      </div>
+
+      {/* Modal */}
+      <Modal isOpen={modalOpen} onClose={() => setModalOpen(false)}>
+        <h2 className="text-xl font-semibold mb-4">
+          {editId ? "Update Room" : "Add Room"}
+        </h2>
+        <form
+          onSubmit={handleSubmit(onSubmit)}
+          className="space-y-4 max-h-[70vh] overflow-y-auto"
+        >
+          <div>
+            <label className="block mb-1 font-medium">Room Number</label>
+            <input
+              {...register("roomNumber", { required: true })}
+              className="w-full border p-2 rounded"
+            />
+          </div>
+          <div>
+            <label className="block mb-1 font-medium">Room Type</label>
+            <select
+              {...register("roomType")}
+              className="w-full border p-2 rounded"
             >
-              {idx + 1}
+              <option value="Room">Room</option>
+              <option value="Laboratory">Laboratory</option>
+              <option value="Seminar Room">Seminar Room</option>
+              <option value="Computer Lab">Computer Lab</option>
+            </select>
+          </div>
+          <div>
+            <label className="block mb-1 font-medium">Capacity</label>
+            <input
+              {...register("capacity", { required: true })}
+              className="w-full border p-2 rounded"
+              type="number"
+            />
+          </div>
+          <div>
+            <label className="block mb-1 font-medium">Location</label>
+            <select
+              {...register("location")}
+              className="w-full border p-2 rounded"
+            >
+              <option value="Main Campus">Main Campus</option>
+              <option value="Sub Campus">Sub Campus</option>
+            </select>
+          </div>
+          <div>
+            <label className="block mb-1 font-medium">Equipment</label>
+            <select
+              {...register("equipment")}
+              className="w-full border p-2 rounded"
+            >
+              <option value="Lecture">Lecture</option>
+              <option value="Lab">Lab</option>
+            </select>
+          </div>
+          <div>
+            <label className="block mb-1 font-medium">Active Status</label>
+            <select
+              {...register("isActive")}
+              className="w-full border p-2 rounded"
+            >
+              <option value={true}>Active</option>
+              <option value={false}>Inactive</option>
+            </select>
+          </div>
+
+          {/* Availability Field */}
+          <div>
+            <label className="block mb-1 font-medium">Availability</label>
+            {availabilityFields.map((field, index) => (
+              <div
+                key={field.id}
+                className="mb-4 p-3 border rounded bg-gray-50"
+              >
+                <div className="flex gap-2 mb-2">
+                  <select
+                    {...register(`availability.${index}.day`, {
+                      required: "Select a day",
+                    })}
+                    className="p-2 border rounded flex-1"
+                    defaultValue={field.day || ""}
+                  >
+                    <option value="">Select Day</option>
+                    {daysOfWeek.map((day) => (
+                      <option key={day} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => remove(index)}
+                    className="bg-red-500 text-white px-2 rounded"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                {/* Nested Time Slots */}
+                <div className="space-y-2">
+                  {field.timeSlots?.map((_, timeIndex) => (
+                    <div key={timeIndex} className="flex gap-2">
+                      <input
+                        type="time"
+                        {...register(
+                          `availability.${index}.timeSlots.${timeIndex}`
+                        )}
+                        placeholder="Time Slot (e.g., 9:00-10:00)"
+                        className="border p-2 rounded w-full"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const updatedAvailability = [
+                            ...control._formValues.availability,
+                          ];
+                          updatedAvailability[index].timeSlots.splice(
+                            timeIndex,
+                            1
+                          );
+                          reset({
+                            ...control._formValues,
+                            availability: updatedAvailability,
+                          });
+                        }}
+                        className="bg-red-400 text-white px-2 rounded"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Add Time Slot Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const updatedAvailability = [
+                      ...control._formValues.availability,
+                    ];
+                    updatedAvailability[index].timeSlots.push("");
+                    reset({
+                      ...control._formValues,
+                      availability: updatedAvailability,
+                    });
+                  }}
+                  className="mt-2 px-3 py-1 bg-blue-500 text-white rounded"
+                >
+                  + Add Time Slot
+                </button>
+              </div>
+            ))}
+
+            <button
+              type="button"
+              onClick={() => append({ day: "", timeSlots: [""] })}
+              className="mt-3 px-4 py-2 bg-green-600 text-white rounded"
+            >
+              + Add Day
             </button>
-          ))}
-          <button
-            disabled={currentPage === totalPages}
-            onClick={() =>
-              setCurrentPage((prev) => Math.min(prev + 1, totalPages))
-            }
-            className={`px-4 py-2 rounded ${
-              currentPage === totalPages
-                ? "bg-gray-300 cursor-not-allowed"
-                : "bg-blue-600 text-white hover:bg-blue-700"
-            }`}
-          >
-            Next
-          </button>
-        </div>
-      )}
+          </div>
+          {/* Add Room & Cancel Buttons */}
+          <div className="flex justify-end gap-3 pt-4">
+            <button
+              type="button"
+              onClick={() => {
+                reset();
+                setModalOpen(false);
+              }}
+              className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+            >
+              {editId ? "Update Room" : "Add Room"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 };
 
-export default Rooms;
+export default RoomsPage;

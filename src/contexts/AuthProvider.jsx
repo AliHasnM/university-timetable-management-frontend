@@ -1,23 +1,24 @@
 import { useEffect, useState } from "react";
-import AuthContext from "./AuthContext"; // ✅ path correct hona chahiye
+import AuthContext from "./AuthContext";
 
 const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true); // ✅ added loading state
 
   useEffect(() => {
     const storedUser = localStorage.getItem("user");
     if (storedUser) {
       try {
         const parsedUser = JSON.parse(storedUser);
-        setUser(parsedUser); // Set the user if valid
+        setUser(parsedUser);
       } catch (error) {
         console.error("Failed to parse user data from localStorage:", error);
-        localStorage.removeItem("user"); // Clean up invalid data
+        localStorage.removeItem("user");
       }
     }
+    setLoading(false); // ✅ done checking localStorage
   }, []);
 
-  // 🟡 Accepts either only `user` or full { user, accessToken } object
   const login = (data) => {
     const userData = data?.user || data;
     const accessToken = data?.accessToken;
@@ -27,7 +28,7 @@ const AuthProvider = ({ children }) => {
       if (accessToken) {
         localStorage.setItem("accessToken", accessToken);
       }
-      setUser(userData); // ✅ this should trigger re-render in Navbar
+      setUser(userData);
     }
   };
 
@@ -38,48 +39,10 @@ const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, login, logout, loading }}>
       {children}
     </AuthContext.Provider>
   );
 };
 
 export default AuthProvider;
-
-// import { useEffect, useState } from "react";
-// import AuthContext from "./AuthContext"; // ✅ path correct hona chahiye
-
-// const AuthProvider = ({ children }) => {
-//   const [user, setUser] = useState(null);
-
-//   useEffect(() => {
-//     const storedUser = localStorage.getItem("user");
-//     if (storedUser) {
-//       try {
-//         const parsedUser = JSON.parse(storedUser);
-//         setUser(parsedUser); // Set the user if valid
-//       } catch (error) {
-//         console.error("Failed to parse user data from localStorage:", error);
-//         localStorage.removeItem("user"); // Clean up invalid data
-//       }
-//     }
-//   }, []);
-
-//   const login = (userData) => {
-//     localStorage.setItem("user", JSON.stringify(userData));
-//     setUser(userData);
-//   };
-
-//   const logout = () => {
-//     localStorage.removeItem("user");
-//     setUser(null);
-//   };
-
-//   return (
-//     <AuthContext.Provider value={{ user, login, logout }}>
-//       {children}
-//     </AuthContext.Provider>
-//   );
-// };
-
-// export default AuthProvider;

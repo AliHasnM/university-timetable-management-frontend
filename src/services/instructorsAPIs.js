@@ -47,7 +47,7 @@ export const getInstructorById = async (instructorId) => {
 export const getAllInstructors = async () => {
   try {
     const { data } = await api.get("/instructors/admin/get-all-instructor");
-    return data;
+    return data; // Assuming the API returns an object with a 'data' property containing the list of instructors
   } catch (error) {
     const errorMessage =
       error.response?.data?.message || "Failed to get instructors.";

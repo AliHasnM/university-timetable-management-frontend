@@ -46,6 +46,7 @@ export const getTimetable = async (filters = {}) => {
     throw new Error(error.response?.data?.message || "Something went wrong");
   }
 };
+
 /**
  * Edit a timetable entry (Admin)
  */
@@ -98,29 +99,38 @@ export const sendTimetableEmailToAll = () =>
 /**
  * Get timetable for currently logged-in student
  */
-export const getStudentTimetable = () =>
-  handleApi(
-    () => api.get("/timetables/student/view-timetable"),
-    "Failed to get student timetable."
-  );
-
+export const getStudentTimetable = async (filters = {}) => {
+  try {
+    const res = await api.get("/timetables/student/view-timetable", {
+      params: filters,
+    });
+    return res;
+  } catch (error) {
+    throw new Error(error.response?.data?.message || "Something went wrong");
+  }
+};
 /**
  * Download timetable for student as PDF
  */
-export const downloadStudentTimetablePDF = async () => {
+export const downloadStudentTimetablePDF = async ({
+  department,
+  semester,
+  shift,
+}) => {
   try {
     const { data } = await api.get("/timetables/student/download-timetable", {
+      params: { department, semester, shift },
       responseType: "blob",
     });
+
     return {
       blob: data,
-      filename: "student-timetable.pdf",
+      filename: "admin-timetable.pdf",
     };
   } catch (error) {
     const errorMessage =
-      error.response?.data?.message ||
-      "Failed to download student timetable PDF.";
-    console.error("Error in downloadStudentTimetablePDF:", errorMessage);
+      error.response?.data?.message || "Failed to download timetable PDF.";
+    console.error("Error in downloadTimetablePDF:", errorMessage);
     throw new Error(errorMessage);
   }
 };

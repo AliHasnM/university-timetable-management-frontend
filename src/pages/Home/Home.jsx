@@ -23,7 +23,7 @@ const Home = () => {
             University Timetable Management
           </span>
         </h1>
-        <p className="text-lg md:text-xl mb-8 text-gray-200">
+        <p className="text-lg md:text-xl mb-8 text-gray-200 bg-zinc-500 rounded-full px-4 py-2 tracking-tighter opacity-85 shadow-lg">
           Streamline your schedule, manage courses, and optimize room bookings —
           all in one place.
         </p>

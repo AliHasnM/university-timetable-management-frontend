@@ -15,6 +15,8 @@ import Courses from "./pages/Courses/Courses.jsx";
 import Rooms from "./pages/Rooms/Rooms.jsx";
 import Timetable from "./pages/Timetable/Timetable.jsx";
 
+import StudentTimetable from "./pages/StudentTimetable/StudentTimetable.jsx";
+
 const App = () => {
   return (
     <AuthProvider>
@@ -39,6 +41,8 @@ const App = () => {
             <Route path="courses" element={<Courses />} />
             <Route path="rooms" element={<Rooms />} />
             <Route path="timetable" element={<Timetable />} />
+
+            <Route path="view-timetable" element={<StudentTimetable />} />
           </Route>
         </Routes>
       </Router>

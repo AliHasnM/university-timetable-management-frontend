@@ -1,25 +1,18 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useEffect, useState } from "react";
 import {
-  getTimetable,
-  downloadTimetablePDF,
-  sendTimetableEmailToAll,
-  // generateTimetable,
-  editTimetableEntry,
+  getStudentTimetable,
+  downloadStudentTimetablePDF,
 } from "../../services/timetableAPIs";
 import "jspdf-autotable";
 import * as XLSX from "xlsx";
-import TimetableModalForm from "../../components/TimetableModalForm/TimetableModalForm";
-
 const ITEMS_PER_PAGE = 10;
 
-const Timetable = () => {
+const StudentTimetable = () => {
   const [timetable, setTimetable] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [editingEntry, setEditingEntry] = useState(null);
 
   const [filters, setFilters] = useState({
     department: "",
@@ -29,7 +22,8 @@ const Timetable = () => {
 
   const fetchTimetable = async () => {
     const { department, semester, shift } = filters;
-
+    console.log("Fetching timetable with filters:", filters);
+    // Validate filters
     if (!department || !semester || !shift) {
       console.warn("Missing department, semester, or shift");
       setTimetable([]);
@@ -39,7 +33,7 @@ const Timetable = () => {
     try {
       setLoading(true);
       setError("");
-      const response = await getTimetable(filters); // calls backend
+      const response = await getStudentTimetable(filters); // calls backend
       console.log("Fetched timetable:", response.data);
 
       // Handle the correct API response structure
@@ -88,42 +82,11 @@ const Timetable = () => {
   }, [filters]);
 
   const handleFilterChange = (e) => {
-    setFilters({ ...filters, [e.target.name]: e.target.value });
-    setCurrentPage(1); // Reset to first page when filters change
-  };
-
-  const handleEditEntry = async (entryId, updateData) => {
-    try {
-      setLoading(true);
-      setError("");
-      await editTimetableEntry(entryId, updateData);
-      alert("Timetable entry updated successfully!");
-
-      // Refresh the timetable data after edit
-      await fetchTimetable();
-      setEditingEntry(null);
-    } catch (err) {
-      alert("Failed to edit timetable entry: " + err.message);
-      console.error("Error editing timetable entry:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSendToStudents = async () => {
-    try {
-      setLoading(true);
-      setError("");
-      await sendTimetableEmailToAll();
-      alert("Timetable sent to students successfully!");
-    } catch (err) {
-      alert("Failed to send timetable: " + err.message);
-      console.error("Error sending timetable:", err);
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    const { name, value } = e.target;
+    const newFilters = { ...filters, [name]: value };
+    setFilters(newFilters);
+    setCurrentPage(1);
+    console.log("Updated Filters:", newFilters); // ✅ Check this in console
   };
 
   const handleDownloadPDF = async () => {
@@ -135,7 +98,7 @@ const Timetable = () => {
 
       const { department, semester, shift } = filters;
 
-      const result = await downloadTimetablePDF({
+      const result = await downloadStudentTimetablePDF({
         department,
         semester,
         shift,
@@ -238,7 +201,7 @@ const Timetable = () => {
   return (
     <div className="max-w-7xl mx-auto p-6">
       <h1 className="text-3xl font-bold pt-10 mb-6 text-blue-800">
-        Manage Timetable
+        View Timetable
       </h1>
 
       {/* Error Display */}
@@ -286,13 +249,6 @@ const Timetable = () => {
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-4 mb-6">
         <button
-          onClick={() => setShowModal(true)}
-          disabled={loading}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded disabled:opacity-50"
-        >
-          Generate Timetable
-        </button>
-        <button
           onClick={handleDownloadPDF}
           disabled={loading || filteredItems.length === 0}
           className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50"
@@ -312,27 +268,7 @@ const Timetable = () => {
         >
           Export Excel
         </button>
-
-        <button
-          onClick={handleSendToStudents}
-          disabled={loading || filteredItems.length === 0}
-          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded disabled:opacity-50"
-        >
-          {loading ? "Sending..." : "Send to Students"}
-        </button>
       </div>
-
-      {/* Modal */}
-      {showModal && (
-        <TimetableModalForm
-          isOpen={showModal}
-          onClose={() => setShowModal(false)}
-          onSuccess={(formData) => {
-            setFilters(formData); // ✅ yahan save ho gaya
-            fetchTimetable(formData); // agar table bhi render karni ho
-          }}
-        />
-      )}
 
       {/* Loading Indicator */}
       {loading && (
@@ -353,7 +289,6 @@ const Timetable = () => {
               <th className="py-3 px-4 text-left">Day</th>
               <th className="py-3 px-4 text-left">Time</th>
               <th className="py-3 px-4 text-left">Credits</th>
-              <th className="py-3 px-4 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -364,7 +299,7 @@ const Timetable = () => {
                     ? "Loading..."
                     : error
                     ? error
-                    : "No timetable entries found. Please generate a timetable first or check your filters."}
+                    : "No timetable entries found. Please check your filters."}
                 </td>
               </tr>
             ) : (
@@ -382,15 +317,6 @@ const Timetable = () => {
                   <td className="py-3 px-4">{entry.day}</td>
                   <td className="py-3 px-4">{entry.classes[0]?.timeSlot}</td>
                   <td className="py-3 px-4">{entry.classes[0]?.creditHours}</td>
-                  <td className="py-3 px-4">
-                    <button
-                      onClick={() => setEditingEntry(entry)}
-                      className="bg-orange-500 hover:bg-orange-600 text-white px-2 py-1 rounded text-sm"
-                      disabled={loading}
-                    >
-                      Edit
-                    </button>
-                  </td>
                 </tr>
               ))
             )}
@@ -440,104 +366,8 @@ const Timetable = () => {
           </button>
         </div>
       )}
-
-      {/* Edit Modal */}
-      {editingEntry && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-bold mb-4">Edit Timetable Entry</h3>
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const formData = new FormData(e.target);
-                const updateData = Object.fromEntries(formData.entries());
-                handleEditEntry(
-                  editingEntry.id || editingEntry._id,
-                  updateData
-                );
-              }}
-            >
-              <div className="space-y-4">
-                <input
-                  name="courseName"
-                  defaultValue={editingEntry.courseName}
-                  placeholder="Course Name"
-                  className="w-full border px-3 py-2 rounded"
-                  required
-                />
-                <input
-                  name="courseCode"
-                  defaultValue={editingEntry.courseCode}
-                  placeholder="Course Code"
-                  className="w-full border px-3 py-2 rounded"
-                  required
-                />
-                <input
-                  name="instructorName"
-                  defaultValue={editingEntry.instructorName}
-                  placeholder="Instructor Name"
-                  className="w-full border px-3 py-2 rounded"
-                  required
-                />
-                <input
-                  name="roomNumber"
-                  defaultValue={editingEntry.roomNumber}
-                  placeholder="Room Number"
-                  className="w-full border px-3 py-2 rounded"
-                  required
-                />
-                <select
-                  name="day"
-                  defaultValue={editingEntry.day}
-                  className="w-full border px-3 py-2 rounded"
-                  required
-                >
-                  <option value="">Select Day</option>
-                  <option value="Monday">Monday</option>
-                  <option value="Tuesday">Tuesday</option>
-                  <option value="Wednesday">Wednesday</option>
-                  <option value="Thursday">Thursday</option>
-                  <option value="Friday">Friday</option>
-                  <option value="Saturday">Saturday</option>
-                </select>
-                <input
-                  name="timeSlot"
-                  defaultValue={editingEntry.timeSlot}
-                  placeholder="Time Slot (e.g., 09:00-10:00)"
-                  className="w-full border px-3 py-2 rounded"
-                  required
-                />
-                <input
-                  name="creditHours"
-                  type="number"
-                  defaultValue={editingEntry.creditHours}
-                  placeholder="Credit Hours"
-                  className="w-full border px-3 py-2 rounded"
-                  required
-                />
-              </div>
-              <div className="flex gap-4 mt-6">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded disabled:opacity-50"
-                >
-                  {loading ? "Updating..." : "Update"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditingEntry(null)}
-                  className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
 
-export default Timetable;
+export default StudentTimetable;
